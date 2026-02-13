@@ -82,21 +82,13 @@ CONTAINS
 
     IF (ZA < 1 .OR. ZA > NB_KNW_ATMS) THEN
       PRINT *, "ERREUR: Numero atomique hors limites:", ZA
-      a1 = 0.0d0
-      a2 = 0.0d0
-      a3 = 0.0d0
-      b1 = 0.0d0
-      b2 = 0.0d0
-      b3 = 0.0d0
+      a1 = 0.0d0; a2 = 0.0d0; a3 = 0.0d0
+      b1 = 0.0d0; b2 = 0.0d0; b3 = 0.0d0
       RETURN
     END IF
 
-    a1 = AA1(ZA)
-    a2 = AA2(ZA)
-    a3 = AA3(ZA)
-    b1 = BB1(ZA)
-    b2 = BB2(ZA)
-    b3 = BB3(ZA)
+    a1 = AA1(ZA); a2 = AA2(ZA); a3 = AA3(ZA)
+    b1 = BB1(ZA); b2 = BB2(ZA); b3 = BB3(ZA)
   END SUBROUTINE get_ab_coefficients
 
 END MODULE ab_module
@@ -126,25 +118,17 @@ CONTAINS
     REAL(8) :: exp1, exp2, exp3, factor
 
     CALL get_ab_coefficients(ZA, a1, a2, a3, b1, b2, b3)
-    dx = x - ax
-    dy = y - ay
-    dz = z - az
+    dx = x - ax; dy = y - ay; dz = z - az
     r = SQRT(dx**2 + dy**2 + dz**2)
 
     IF (r < 1.0d-10) THEN
-      drho_dx = 0.0d0
-      drho_dy = 0.0d0
-      drho_dz = 0.0d0
+      drho_dx = 0.0d0; drho_dy = 0.0d0; drho_dz = 0.0d0
       RETURN
     END IF
 
-    exp1 = EXP(-b1*r)
-    exp2 = EXP(-b2*r)
-    exp3 = EXP(-b3*r)
+    exp1 = EXP(-b1*r); exp2 = EXP(-b2*r); exp3 = EXP(-b3*r)
     factor = -(a1*b1*exp1 + a2*b2*exp2 + a3*b3*exp3) / r
-    drho_dx = factor * dx
-    drho_dy = factor * dy
-    drho_dz = factor * dz
+    drho_dx = factor * dx; drho_dy = factor * dy; drho_dz = factor * dz
   END SUBROUTINE grad_rho_atom
 
   FUNCTION compute_dg_ab(x, y, z, xa, ya, za, ZAa, xb, yb, zb, ZAb) RESULT(dg)
@@ -188,8 +172,7 @@ CONTAINS
     DO
       READ(unit,'(A)',END=100) line
       IF (INDEX(line,"<Number of Nuclei>")>0) THEN
-        READ(unit,*) natoms
-        EXIT
+        READ(unit,*) natoms; EXIT
       END IF
     END DO
 
@@ -249,15 +232,10 @@ CONTAINS
     INTEGER :: pos_sel_a, pos_sel_b
 
     has_fragments = .FALSE.
-    frag1_start = 0
-    frag1_end = 0
-    frag2_start = 0
-    frag2_end = 0
+    frag1_start = 0; frag1_end = 0; frag2_start = 0; frag2_end = 0
 
     OPEN(NEWUNIT=unit, FILE=TRIM(filename), STATUS="OLD", IOSTAT=ios)
-    IF (ios /= 0) THEN
-      RETURN
-    END IF
+    IF (ios /= 0) RETURN
 
     READ(unit, '(A)', IOSTAT=ios) line
     READ(unit, '(A)', IOSTAT=ios) line
@@ -280,25 +258,19 @@ CONTAINS
 
     dash_pos = INDEX(sel_a, '-')
     IF (dash_pos > 0) THEN
-      READ(sel_a(1:dash_pos-1), *, IOSTAT=ios) frag1_start
-      IF (ios /= 0) RETURN
-      READ(sel_a(dash_pos+1:), *, IOSTAT=ios) frag1_end
-      IF (ios /= 0) RETURN
+      READ(sel_a(1:dash_pos-1), *, IOSTAT=ios) frag1_start; IF (ios /= 0) RETURN
+      READ(sel_a(dash_pos+1:), *, IOSTAT=ios) frag1_end; IF (ios /= 0) RETURN
     ELSE
-      READ(sel_a, *, IOSTAT=ios) frag1_start
-      IF (ios /= 0) RETURN
+      READ(sel_a, *, IOSTAT=ios) frag1_start; IF (ios /= 0) RETURN
       frag1_end = frag1_start
     END IF
 
     dash_pos = INDEX(sel_b, '-')
     IF (dash_pos > 0) THEN
-      READ(sel_b(1:dash_pos-1), *, IOSTAT=ios) frag2_start
-      IF (ios /= 0) RETURN
-      READ(sel_b(dash_pos+1:), *, IOSTAT=ios) frag2_end
-      IF (ios /= 0) RETURN
+      READ(sel_b(1:dash_pos-1), *, IOSTAT=ios) frag2_start; IF (ios /= 0) RETURN
+      READ(sel_b(dash_pos+1:), *, IOSTAT=ios) frag2_end; IF (ios /= 0) RETURN
     ELSE
-      READ(sel_b, *, IOSTAT=ios) frag2_start
-      IF (ios /= 0) RETURN
+      READ(sel_b, *, IOSTAT=ios) frag2_start; IF (ios /= 0) RETURN
       frag2_end = frag2_start
     END IF
 
@@ -322,9 +294,7 @@ CONTAINS
     LOGICAL :: visited(natoms), changed
 
     ALLOCATE(fragment_id(natoms))
-    fragment_id = 0
-    visited = .FALSE.
-    nfrags = 0
+    fragment_id = 0; visited = .FALSE.; nfrags = 0
 
     DO i = 1, natoms
       IF (.NOT. visited(i)) THEN
@@ -337,14 +307,12 @@ CONTAINS
           changed = .FALSE.
           DO j = 1, natoms
             IF (fragment_id(j) == nfrags .AND. .NOT. visited(j)) THEN
-              visited(j) = .TRUE.
-              changed = .TRUE.
+              visited(j) = .TRUE.; changed = .TRUE.
             END IF
             IF (fragment_id(j) == nfrags) THEN
               DO current_frag = 1, natoms
                 IF (bond_matrix(j, current_frag) .AND. fragment_id(current_frag) == 0) THEN
-                  fragment_id(current_frag) = nfrags
-                  changed = .TRUE.
+                  fragment_id(current_frag) = nfrags; changed = .TRUE.
                 END IF
               END DO
             END IF
@@ -372,7 +340,7 @@ PROGRAM ibsi_analysis
   INTEGER :: nx, ny, nz
   REAL(8) :: x, y, z, dg_sum, d_ab, dV, ibsi_ab
   REAL(8) :: threshold_cov, threshold_nc
-  INTEGER :: unit_pdb, unit_res, iarg, iostat_val
+  INTEGER :: unit_pdb, unit_res1, unit_res2, iarg, iostat_val
   CHARACTER(2) :: atom_symbol
   LOGICAL, ALLOCATABLE :: bond_matrix_cov(:,:), bond_matrix_nc(:,:)
   CHARACTER(len=256) :: arg, input_dir, wfx_file, xyz_file, temp_val
@@ -546,6 +514,27 @@ PROGRAM ibsi_analysis
   PRINT *, "=========================================================="
   PRINT *, ""
 
+  ! **NOUVEAU : Écriture fichier passe 1**
+  OPEN(NEWUNIT=unit_res1, FILE="ibsi_results_pass1.dat", STATUS="REPLACE")
+  WRITE(unit_res1,*) "# Resultats IBSI - PASSE 1 (Liaisons covalentes)"
+  WRITE(unit_res1,*) "# Dossier:", TRIM(input_dir)
+  WRITE(unit_res1,*) "# Nombre d'atomes:", natoms
+  WRITE(unit_res1,*) "# Seuil liaisons covalentes:", threshold_cov
+  WRITE(unit_res1,*) "#"
+  WRITE(unit_res1,*) "# Format: Atome_i Atome_j IBSI_ij Type(0=aucune,1=covalente)"
+  DO a = 1, natoms-1
+    DO b = a+1, natoms
+      IF (bond_matrix_cov(a,b)) THEN
+        WRITE(unit_res1,'(I5,I5,F15.8,I5)') a, b, ibsi_matrix(a,b), 1
+      ELSE
+        WRITE(unit_res1,'(I5,I5,F15.8,I5)') a, b, ibsi_matrix(a,b), 0
+      END IF
+    END DO
+  END DO
+  CLOSE(unit_res1)
+  PRINT *, "Fichier de resultats ecrit: ibsi_results_pass1.dat"
+  PRINT *, ""
+
   PRINT *, "Structure moleculaire (graphe de liaisons covalentes):"
   PRINT *, "----------------------------------------------------------"
   DO a = 1, natoms
@@ -610,6 +599,28 @@ PROGRAM ibsi_analysis
     PRINT *, "Nombre de liaisons non-covalentes detectees: ", nbonds_nc
     PRINT *, "=========================================================="
     PRINT *, ""
+
+    ! **NOUVEAU : Écriture fichier passe 2**
+    OPEN(NEWUNIT=unit_res2, FILE="ibsi_results_pass2.dat", STATUS="REPLACE")
+    WRITE(unit_res2,*) "# Resultats IBSI - PASSE 2 (Liaisons non-covalentes)"
+    WRITE(unit_res2,*) "# Dossier:", TRIM(input_dir)
+    WRITE(unit_res2,*) "# Fragment A: atomes", frag1_start, "a", frag1_end
+    WRITE(unit_res2,*) "# Fragment B: atomes", frag2_start, "a", frag2_end
+    WRITE(unit_res2,*) "# Seuil liaisons non-covalentes:", threshold_nc
+    WRITE(unit_res2,*) "#"
+    WRITE(unit_res2,*) "# Format: Atome_i Atome_j IBSI_ij Type(0=aucune,2=non-cov)"
+    DO a = frag1_start, frag1_end
+      DO b = frag2_start, frag2_end
+        IF (bond_matrix_nc(a,b)) THEN
+          WRITE(unit_res2,'(I5,I5,F15.8,I5)') a, b, ibsi_matrix(a,b), 2
+        ELSE
+          WRITE(unit_res2,'(I5,I5,F15.8,I5)') a, b, ibsi_matrix(a,b), 0
+        END IF
+      END DO
+    END DO
+    CLOSE(unit_res2)
+    PRINT *, "Fichier de resultats ecrit: ibsi_results_pass2.dat"
+    PRINT *, ""
   END IF
 
   OPEN(NEWUNIT=unit_pdb, FILE="molecule.pdb", STATUS="REPLACE")
@@ -652,28 +663,6 @@ PROGRAM ibsi_analysis
   IF (has_fragments) THEN
     PRINT *, "  - Liaisons non-covalentes: pointilles (dans VMD)"
   END IF
-
-  OPEN(NEWUNIT=unit_res, FILE="ibsi_results.dat", STATUS="REPLACE")
-  WRITE(unit_res,*) "# Resultats IBSI - Matrice complete"
-  WRITE(unit_res,*) "# Dossier:", TRIM(input_dir)
-  WRITE(unit_res,*) "# Nombre d'atomes:", natoms
-  WRITE(unit_res,*) "# Seuil liaisons covalentes:", threshold_cov
-  WRITE(unit_res,*) "# Seuil liaisons non-covalentes:", threshold_nc
-  WRITE(unit_res,*) "#"
-  WRITE(unit_res,*) "# Format: Atome_i Atome_j IBSI_ij Type(0=aucune,1=covalente,2=non-cov)"
-  DO a = 1, natoms-1
-    DO b = a+1, natoms
-      IF (bond_matrix_cov(a,b)) THEN
-        WRITE(unit_res,'(I5,I5,F15.8,I5)') a, b, ibsi_matrix(a,b), 1
-      ELSE IF (bond_matrix_nc(a,b)) THEN
-        WRITE(unit_res,'(I5,I5,F15.8,I5)') a, b, ibsi_matrix(a,b), 2
-      ELSE
-        WRITE(unit_res,'(I5,I5,F15.8,I5)') a, b, ibsi_matrix(a,b), 0
-      END IF
-    END DO
-  END DO
-  CLOSE(unit_res)
-  PRINT *, "Fichier de resultats ecrit: ibsi_results.dat"
 
   PRINT *, ""
   PRINT *, "=========================================================="

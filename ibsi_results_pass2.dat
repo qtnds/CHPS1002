@@ -1,0 +1,17 @@
+ # Resultats IBSI - PASSE 2 (Liaisons non-covalentes)
+ # Dossier:exemples_arbre_molecule/2
+ # Fragment A: atomes           1 a           5
+ # Fragment B: atomes           6 a           7
+ # Seuil liaisons non-covalentes:   1.0000000000000000E-003
+ #
+ # Format: Atome_i Atome_j IBSI_ij Type(0=aucune,2=non-cov)
+    1    6     0.00341703    2
+    1    7     0.00006613    0
+    2    6     0.00221932    2
+    2    7     0.00004401    0
+    3    6     0.00197294    2
+    3    7     0.00004186    0
+    4    6     0.00016079    0
+    4    7     0.00000307    0
+    5    6     0.00220972    2
+    5    7     0.00004504    0

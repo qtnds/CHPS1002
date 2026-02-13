@@ -1,56 +1,36 @@
 #!/usr/bin/env python3
 """
 Script de visualisation des résultats IBSI
-Analyse des liaisons moléculaires
+Histogrammes comparatifs Passe 1 vs Passe 2
 """
 
 import numpy as np
 import matplotlib.pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
 import sys
+import os
 
-def read_wfx_geometry(filename="fichier.wfx"):
-    """Lecture de la géométrie depuis le fichier WFX"""
-    natoms = 0
-    coords = []
-    atomic_numbers = []
-    
-    with open(filename, 'r') as f:
-        lines = f.readlines()
-    
-    # Recherche du nombre d'atomes
-    for i, line in enumerate(lines):
-        if "<Number of Nuclei>" in line:
-            natoms = int(lines[i+1].strip())
-            break
-    
-    # Lecture des coordonnées
-    for i, line in enumerate(lines):
-        if "<Nuclear Cartesian Coordinates>" in line:
-            for j in range(natoms):
-                coord = list(map(float, lines[i+1+j].strip().split()))
-                coords.append(coord)
-            break
-    
-    # Lecture des numéros atomiques
-    for i, line in enumerate(lines):
-        if "<Atomic Numbers>" in line:
-            for j in range(natoms):
-                z = int(lines[i+1+j].strip())
-                atomic_numbers.append(z)
-            break
-    
-    return natoms, np.array(coords), np.array(atomic_numbers)
-
-
-def read_ibsi_results(filename="ibsi_results.dat"):
+def read_ibsi_results(filename):
     """Lecture des résultats IBSI"""
     data = []
+    threshold = None
     
     with open(filename, 'r') as f:
         for line in f:
-            # Ignorer les lignes de commentaires
             line = line.strip()
+            
+            # Lecture du seuil dans l'en-tête
+            if line.startswith('# Seuil liaisons covalentes:'):
+                try:
+                    threshold = float(line.split(':')[1].strip())
+                except:
+                    pass
+            elif line.startswith('# Seuil liaisons non-covalentes:'):
+                try:
+                    threshold = float(line.split(':')[1].strip())
+                except:
+                    pass
+            
+            # Ignorer les autres lignes de commentaires
             if not line or line.startswith('#'):
                 continue
             
@@ -61,231 +41,253 @@ def read_ibsi_results(filename="ibsi_results.dat"):
                     i = int(parts[0])
                     j = int(parts[1])
                     ibsi = float(parts[2])
-                    bond = int(parts[3])
-                    data.append([i, j, ibsi, bond])
-                except ValueError as e:
-                    print(f"Attention: ligne ignorée (erreur de parsing): {line}")
+                    bond_type = int(parts[3])
+                    data.append([i, j, ibsi, bond_type])
+                except ValueError:
                     continue
     
     if len(data) == 0:
-        raise ValueError("Aucune donnée valide trouvée dans ibsi_results.dat")
+        raise ValueError(f"Aucune donnée valide trouvée dans {filename}")
     
-    return np.array(data)
+    return np.array(data), threshold
 
 
-def get_atom_color(z):
-    """Retourne la couleur d'un atome selon son numéro atomique"""
-    color_map = {
-        1: 'white',      # H
-        6: 'gray',       # C
-        7: 'blue',       # N
-        8: 'red',        # O
-        9: 'lime',       # F
-        15: 'orange',    # P
-        16: 'yellow',    # S
-        17: 'green',     # Cl
-    }
-    return color_map.get(z, 'pink')
-
-
-def get_atom_symbol(z):
-    """Retourne le symbole d'un atome"""
-    symbol_map = {
-        1: 'H', 6: 'C', 7: 'N', 8: 'O', 9: 'F',
-        15: 'P', 16: 'S', 17: 'Cl'
-    }
-    return symbol_map.get(z, 'X')
-
-
-def plot_molecule_3d(coords, atomic_numbers, bonds_data):
-    """Visualisation 3D de la molécule avec les liaisons"""
-    fig = plt.figure(figsize=(14, 6))
+def plot_dual_histograms(data_pass1, threshold_cov, data_pass2, threshold_nc):
+    """Histogrammes comparatifs Passe 1 et Passe 2"""
     
-    # Conversion bohr -> angström
-    coords_ang = coords * 0.529177
-    natoms = len(atomic_numbers)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
     
-    # Plot 1: Molécule 3D
-    ax1 = fig.add_subplot(121, projection='3d')
+    # =========================================================================
+    # PASSE 1 - Liaisons covalentes
+    # =========================================================================
+    ibsi_pass1 = data_pass1[:, 2]
+    bond_types_pass1 = data_pass1[:, 3]
     
-    # Tracer les atomes
-    for i, (coord, z) in enumerate(zip(coords_ang, atomic_numbers)):
-        ax1.scatter(coord[0], coord[1], coord[2], 
-                   c=get_atom_color(z), s=300, 
-                   edgecolors='black', linewidths=2, alpha=0.8)
-        ax1.text(coord[0], coord[1], coord[2], 
-                f'  {get_atom_symbol(z)}{i+1}', fontsize=10)
+    # Classifier en 3 catégories selon les deux seuils
+    if threshold_nc is not None:
+        # Pas de liaison (< seuil_nc)
+        no_bond_p1 = ibsi_pass1[ibsi_pass1 < threshold_nc]
+        # Non-covalent (seuil_nc <= IBSI < seuil_cov)
+        non_covalent_p1 = ibsi_pass1[(ibsi_pass1 >= threshold_nc) & (ibsi_pass1 < threshold_cov)]
+        # Covalent (>= seuil_cov)
+        covalent_p1 = ibsi_pass1[ibsi_pass1 >= threshold_cov]
+    else:
+        # Si pas de seuil_nc, utiliser l'ancienne classification binaire
+        no_bond_p1 = ibsi_pass1[bond_types_pass1 == 0]
+        non_covalent_p1 = np.array([])  # vide
+        covalent_p1 = ibsi_pass1[bond_types_pass1 == 1]
     
-    # Tracer les liaisons (filtrage des indices hors limites)
-    for bond in bonds_data:
-        ii, jj, ibsi, is_bond = int(bond[0])-1, int(bond[1])-1, bond[2], int(bond[3])
-        if is_bond == 1 and 0 <= ii < natoms and 0 <= jj < natoms:
-            ax1.plot([coords_ang[ii,0], coords_ang[jj,0]],
-                    [coords_ang[ii,1], coords_ang[jj,1]],
-                    [coords_ang[ii,2], coords_ang[jj,2]],
-                    'k-', linewidth=2, alpha=0.6)
+    # Bins adaptés à la passe 1
+    bins_p1 = np.linspace(0, max(ibsi_pass1.max(), threshold_cov * 1.5), 40)
     
-    ax1.set_xlabel('X (Å)', fontsize=12)
-    ax1.set_ylabel('Y (Å)', fontsize=12)
-    ax1.set_zlabel('Z (Å)', fontsize=12)
-    ax1.set_title('Structure moléculaire 3D', fontsize=14, fontweight='bold')
-    ax1.grid(True, alpha=0.3)
+    # Histogrammes passe 1 - TROIS catégories
+    if len(no_bond_p1) > 0:
+        ax1.hist(no_bond_p1, bins=bins_p1, color='lightcoral', alpha=0.7, 
+                label=f'Pas de liaison (n={len(no_bond_p1)})', 
+                edgecolor='darkred', linewidth=1.2)
     
-    # Plot 2: Matrice IBSI
-    ax2 = fig.add_subplot(122)
+    if len(non_covalent_p1) > 0:
+        ax1.hist(non_covalent_p1, bins=bins_p1, color='gold', alpha=0.7, 
+                label=f'Non-covalentes (n={len(non_covalent_p1)})', 
+                edgecolor='orange', linewidth=1.2)
     
-    # Créer la matrice IBSI complète
-    ibsi_matrix = np.zeros((natoms, natoms))
+    if len(covalent_p1) > 0:
+        ax1.hist(covalent_p1, bins=bins_p1, color='lightgreen', alpha=0.7, 
+                label=f'Covalentes (n={len(covalent_p1)})', 
+                edgecolor='darkgreen', linewidth=1.2)
     
-    for bond in bonds_data:
-        ii, jj, ibsi = int(bond[0])-1, int(bond[1])-1, bond[2]
-        if 0 <= ii < natoms and 0 <= jj < natoms:
-            ibsi_matrix[ii, jj] = ibsi
-            ibsi_matrix[jj, ii] = ibsi
+    # Seuils passe 1 - DEUX seuils
+    if threshold_nc is not None:
+        ax1.axvline(threshold_nc, color='darkorange', linestyle='--', linewidth=2.5, 
+                   label=f'Seuil non-cov = {threshold_nc:.4f}', zorder=10)
     
-    im = ax2.imshow(ibsi_matrix, cmap='RdYlGn', aspect='auto')
-    ax2.set_xlabel('Atome j', fontsize=12)
-    ax2.set_ylabel('Atome i', fontsize=12)
-    ax2.set_title('Matrice IBSI', fontsize=14, fontweight='bold')
+    if threshold_cov is not None:
+        ax1.axvline(threshold_cov, color='darkgreen', linestyle='--', linewidth=2.5, 
+                   label=f'Seuil cov = {threshold_cov:.4f}', zorder=10)
     
-    # Ajouter les labels des atomes
-    labels = [f'{get_atom_symbol(z)}{i+1}' for i, z in enumerate(atomic_numbers)]
-    ax2.set_xticks(range(natoms))
-    ax2.set_yticks(range(natoms))
-    ax2.set_xticklabels(labels, rotation=45)
-    ax2.set_yticklabels(labels)
+    # Zones annotées passe 1 - TROIS zones
+    y_max_p1 = ax1.get_ylim()[1]
     
-    # Colorbar
-    cbar = plt.colorbar(im, ax=ax2)
-    cbar.set_label('IBSI', fontsize=12)
+    if threshold_nc is not None and threshold_cov is not None:
+        # Zone "Pas de liaison"
+        ax1.axvspan(0, threshold_nc, alpha=0.15, color='red', zorder=0)
+        ax1.text(threshold_nc/2, y_max_p1*0.95, 'Pas de liaison', 
+                ha='center', va='top', fontsize=11, fontweight='bold', 
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        # Zone "Non-covalent"
+        ax1.axvspan(threshold_nc, threshold_cov, alpha=0.15, color='orange', zorder=0)
+        ax1.text((threshold_nc + threshold_cov)/2, y_max_p1*0.95, 'Non-covalent', 
+                ha='center', va='top', fontsize=11, fontweight='bold',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        # Zone "Covalent"
+        ax1.axvspan(threshold_cov, ax1.get_xlim()[1], alpha=0.15, color='green', zorder=0)
+        ax1.text((threshold_cov + ax1.get_xlim()[1])/2, y_max_p1*0.95, 'Covalent', 
+                ha='center', va='top', fontsize=11, fontweight='bold',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    elif threshold_cov is not None:
+        # Fallback si pas de seuil_nc (ancienne version)
+        ax1.axvspan(0, threshold_cov, alpha=0.15, color='red', zorder=0)
+        ax1.text(threshold_cov/2, y_max_p1*0.95, 'Pas de liaison', 
+                ha='center', va='top', fontsize=11, fontweight='bold', 
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        ax1.axvspan(threshold_cov, ax1.get_xlim()[1], alpha=0.15, color='green', zorder=0)
+        ax1.text((threshold_cov + ax1.get_xlim()[1])/2, y_max_p1*0.95, 'Covalent', 
+                ha='center', va='top', fontsize=11, fontweight='bold',
+                bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+    
+    # Mise en forme passe 1
+    ax1.set_xlabel('Valeur IBSI', fontsize=13, fontweight='bold')
+    ax1.set_ylabel('Fréquence', fontsize=13, fontweight='bold')
+    ax1.set_title('PASSE 1 - Toutes les paires d\'atomes\n(Classification selon les deux seuils)', 
+                 fontsize=14, fontweight='bold', pad=15)
+    ax1.legend(fontsize=10, loc='upper right', framealpha=0.95)
+    ax1.grid(True, alpha=0.3, linestyle=':', linewidth=0.8)
+    
+    # Statistiques passe 1
+    stats_p1 = f"Total paires: {len(ibsi_pass1)}\n"
+    stats_p1 += f"Pas de liaison: {len(no_bond_p1)} ({len(no_bond_p1)/len(ibsi_pass1)*100:.1f}%)\n"
+    stats_p1 += f"Non-covalentes: {len(non_covalent_p1)} ({len(non_covalent_p1)/len(ibsi_pass1)*100:.1f}%)\n"
+    stats_p1 += f"Covalentes: {len(covalent_p1)} ({len(covalent_p1)/len(ibsi_pass1)*100:.1f}%)"
+    
+    ax1.text(0.02, 0.98, stats_p1, transform=ax1.transAxes,
+            fontsize=9, verticalalignment='top',
+            bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    
+    # =========================================================================
+    # PASSE 2 - Liaisons non-covalentes
+    # =========================================================================
+    if data_pass2 is not None:
+        ibsi_pass2 = data_pass2[:, 2]
+        bond_types_pass2 = data_pass2[:, 3]
+        
+        no_bond_p2 = ibsi_pass2[bond_types_pass2 == 0]
+        non_covalent_p2 = ibsi_pass2[bond_types_pass2 == 2]
+        
+        # Bins adaptés à la passe 2
+        bins_p2 = np.linspace(0, max(ibsi_pass2.max(), threshold_nc * 2), 40)
+        
+        # Histogrammes passe 2
+        if len(no_bond_p2) > 0:
+            ax2.hist(no_bond_p2, bins=bins_p2, color='lightcoral', alpha=0.7, 
+                    label=f'Pas de liaison (n={len(no_bond_p2)})', 
+                    edgecolor='darkred', linewidth=1.2)
+        
+        if len(non_covalent_p2) > 0:
+            ax2.hist(non_covalent_p2, bins=bins_p2, color='gold', alpha=0.7, 
+                    label=f'Non-covalentes (n={len(non_covalent_p2)})', 
+                    edgecolor='orange', linewidth=1.2)
+        
+        # Seuil passe 2
+        if threshold_nc is not None:
+            ax2.axvline(threshold_nc, color='darkorange', linestyle='--', linewidth=2.5, 
+                       label=f'Seuil = {threshold_nc:.4f}', zorder=10)
+        
+        # Zones annotées passe 2
+        y_max_p2 = ax2.get_ylim()[1]
+        
+        if threshold_nc is not None:
+            ax2.axvspan(0, threshold_nc, alpha=0.15, color='red', zorder=0)
+            ax2.text(threshold_nc/2, y_max_p2*0.95, 'Pas de liaison', 
+                    ha='center', va='top', fontsize=11, fontweight='bold', 
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            
+            ax2.axvspan(threshold_nc, ax2.get_xlim()[1], alpha=0.15, color='orange', zorder=0)
+            ax2.text((threshold_nc + ax2.get_xlim()[1])/2, y_max_p2*0.95, 'Non-covalent', 
+                    ha='center', va='top', fontsize=11, fontweight='bold',
+                    bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+        
+        # Mise en forme passe 2
+        ax2.set_xlabel('Valeur IBSI', fontsize=13, fontweight='bold')
+        ax2.set_ylabel('Fréquence', fontsize=13, fontweight='bold')
+        ax2.set_title('PASSE 2 - Paires inter-fragments\n(Liaisons non-covalentes uniquement)', 
+                     fontsize=14, fontweight='bold', pad=15)
+        ax2.legend(fontsize=10, loc='upper right', framealpha=0.95)
+        ax2.grid(True, alpha=0.3, linestyle=':', linewidth=0.8)
+        
+        # Statistiques passe 2
+        stats_p2 = f"Total paires inter-fragments: {len(ibsi_pass2)}\n"
+        stats_p2 += f"Pas de liaison: {len(no_bond_p2)} ({len(no_bond_p2)/len(ibsi_pass2)*100:.1f}%)\n"
+        stats_p2 += f"Non-covalentes: {len(non_covalent_p2)} ({len(non_covalent_p2)/len(ibsi_pass2)*100:.1f}%)"
+        
+        ax2.text(0.02, 0.98, stats_p2, transform=ax2.transAxes,
+                fontsize=9, verticalalignment='top',
+                bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.8))
+    else:
+        ax2.text(0.5, 0.5, 'Passe 2 non effectuée\n(pas de fichier mol.xyz avec fragments)', 
+                ha='center', va='center', fontsize=14, transform=ax2.transAxes,
+                bbox=dict(boxstyle='round', facecolor='lightgray', alpha=0.5))
+        ax2.set_xlabel('Valeur IBSI', fontsize=13, fontweight='bold')
+        ax2.set_ylabel('Fréquence', fontsize=13, fontweight='bold')
+        ax2.set_title('PASSE 2 - Paires inter-fragments\n(Non disponible)', 
+                     fontsize=14, fontweight='bold', pad=15)
     
     plt.tight_layout()
-    plt.savefig('ibsi_molecule_3d.png', dpi=300, bbox_inches='tight')
-    print("Figure sauvegardée: ibsi_molecule_3d.png")
-    plt.show()
-
-
-def plot_ibsi_histogram(bonds_data, threshold=0.05):
-    """Histogramme des valeurs IBSI"""
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
-    
-    ibsi_values = bonds_data[:, 2]
-    is_bond = bonds_data[:, 3]
-    
-    # Histogramme de toutes les valeurs IBSI
-    ax1.hist(ibsi_values, bins=30, color='steelblue', alpha=0.7, edgecolor='black')
-    ax1.axvline(threshold, color='red', linestyle='--', linewidth=2, label=f'Seuil = {threshold}')
-    ax1.set_xlabel('Valeur IBSI', fontsize=12)
-    ax1.set_ylabel('Fréquence', fontsize=12)
-    ax1.set_title('Distribution des valeurs IBSI', fontsize=14, fontweight='bold')
-    ax1.legend(fontsize=11)
-    ax1.grid(True, alpha=0.3)
-    
-    # Comparaison liaisons vs non-liaisons
-    bonds_ibsi = ibsi_values[is_bond == 1]
-    non_bonds_ibsi = ibsi_values[is_bond == 0]
-    
-    if len(bonds_ibsi) > 0 and len(non_bonds_ibsi) > 0:
-        ax2.hist([non_bonds_ibsi, bonds_ibsi], bins=20, 
-                label=['Non-liaisons', 'Liaisons'], 
-                color=['lightcoral', 'lightgreen'], 
-                alpha=0.7, edgecolor='black')
-    elif len(bonds_ibsi) > 0:
-        ax2.hist(bonds_ibsi, bins=20, label='Liaisons', 
-                color='lightgreen', alpha=0.7, edgecolor='black')
-    elif len(non_bonds_ibsi) > 0:
-        ax2.hist(non_bonds_ibsi, bins=20, label='Non-liaisons', 
-                color='lightcoral', alpha=0.7, edgecolor='black')
-    
-    ax2.axvline(threshold, color='red', linestyle='--', linewidth=2, label=f'Seuil = {threshold}')
-    ax2.set_xlabel('Valeur IBSI', fontsize=12)
-    ax2.set_ylabel('Fréquence', fontsize=12)
-    ax2.set_title('Comparaison liaisons/non-liaisons', fontsize=14, fontweight='bold')
-    ax2.legend(fontsize=11)
-    ax2.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.savefig('ibsi_histogram.png', dpi=300, bbox_inches='tight')
-    print("Figure sauvegardée: ibsi_histogram.png")
-    plt.show()
-
-
-def plot_bond_network(coords, atomic_numbers, bonds_data):
-    """Visualisation en réseau 2D des liaisons"""
-    fig, ax = plt.subplots(figsize=(10, 10))
-    
-    # Conversion bohr -> angström
-    coords_ang = coords * 0.529177
-    
-    # Projection 2D (XY)
-    x = coords_ang[:, 0]
-    y = coords_ang[:, 1]
-    
-    # Tracer les liaisons
-    for bond in bonds_data:
-        ii, jj, ibsi, is_bond = int(bond[0])-1, int(bond[1])-1, bond[2], int(bond[3])
-        if is_bond == 1 and 0 <= ii < len(atomic_numbers) and 0 <= jj < len(atomic_numbers):
-            ax.plot([x[ii], x[jj]], [y[ii], y[jj]], 
-                   'k-', linewidth=max(1, 3*ibsi), alpha=0.5)
-            # Annoter l'IBSI sur la liaison
-            mid_x, mid_y = (x[ii] + x[jj])/2, (y[ii] + y[jj])/2
-            ax.text(mid_x, mid_y, f'{ibsi:.3f}', 
-                   fontsize=8, ha='center', 
-                   bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.7))
-    
-    # Tracer les atomes
-    for i, (coord, z) in enumerate(zip(coords_ang, atomic_numbers)):
-        ax.scatter(coord[0], coord[1], 
-                  c=get_atom_color(z), s=500, 
-                  edgecolors='black', linewidths=2, alpha=0.9, zorder=10)
-        ax.text(coord[0], coord[1], 
-               f'{get_atom_symbol(z)}{i+1}', 
-               fontsize=12, ha='center', va='center', fontweight='bold')
-    
-    ax.set_xlabel('X (Å)', fontsize=14)
-    ax.set_ylabel('Y (Å)', fontsize=14)
-    ax.set_title('Réseau de liaisons (projection XY)', fontsize=16, fontweight='bold')
-    ax.grid(True, alpha=0.3)
-    ax.axis('equal')
-    
-    plt.tight_layout()
-    plt.savefig('ibsi_network_2d.png', dpi=300, bbox_inches='tight')
-    print("Figure sauvegardée: ibsi_network_2d.png")
+    plt.savefig('ibsi_histograms_comparison.png', dpi=300, bbox_inches='tight')
+    print("Figure sauvegardée: ibsi_histograms_comparison.png")
     plt.show()
 
 
 def main():
     """Fonction principale"""
     print("="*60)
-    print("Visualisation des résultats IBSI")
+    print("Visualisation des résultats IBSI - Comparaison Passe 1 vs Passe 2")
     print("="*60)
     
     try:
-        # Lecture des données
-        print("\nLecture de la géométrie...")
-        natoms, coords, atomic_numbers = read_wfx_geometry()
-        print(f"  → {natoms} atomes lus")
+        # Lecture passe 1 (obligatoire)
+        print("\nLecture PASSE 1 (ibsi_results_pass1.dat)...")
+        if not os.path.exists("ibsi_results_pass1.dat"):
+            raise FileNotFoundError("ibsi_results_pass1.dat non trouvé!")
         
-        print("\nLecture des résultats IBSI...")
-        bonds_data = read_ibsi_results()
-        print(f"  → {len(bonds_data)} paires analysées")
+        data_pass1, threshold_cov = read_ibsi_results("ibsi_results_pass1.dat")
+        print(f"  → {len(data_pass1)} paires analysées")
         
-        nbonds = np.sum(bonds_data[:, 3])
-        print(f"  → {int(nbonds)} liaisons détectées")
+        if threshold_cov is not None:
+            print(f"  → Seuil covalent: {threshold_cov}")
+        else:
+            print("  ⚠ Seuil covalent non trouvé (utilisation valeur par défaut 0.05)")
+            threshold_cov = 0.05
         
-        # Génération des graphiques
+        # Compter passe 1
+        bond_types_p1 = data_pass1[:, 3]
+        n_no_bond_p1 = np.sum(bond_types_p1 == 0)
+        n_covalent_p1 = np.sum(bond_types_p1 == 1)
+        print(f"  → Pas de liaison: {n_no_bond_p1}")
+        print(f"  → Liaisons covalentes: {n_covalent_p1}")
+        
+        # Lecture passe 2 (optionnelle)
+        data_pass2 = None
+        threshold_nc = None
+        
+        if os.path.exists("ibsi_results_pass2.dat"):
+            print("\nLecture PASSE 2 (ibsi_results_pass2.dat)...")
+            data_pass2, threshold_nc = read_ibsi_results("ibsi_results_pass2.dat")
+            print(f"  → {len(data_pass2)} paires inter-fragments analysées")
+            
+            if threshold_nc is not None:
+                print(f"  → Seuil non-covalent: {threshold_nc}")
+            else:
+                print("  ⚠ Seuil non-covalent non trouvé (utilisation valeur par défaut 0.02)")
+                threshold_nc = 0.02
+            
+            # Compter passe 2
+            bond_types_p2 = data_pass2[:, 3]
+            n_no_bond_p2 = np.sum(bond_types_p2 == 0)
+            n_non_cov_p2 = np.sum(bond_types_p2 == 2)
+            print(f"  → Pas de liaison: {n_no_bond_p2}")
+            print(f"  → Liaisons non-covalentes: {n_non_cov_p2}")
+        else:
+            print("\n⚠ Passe 2 non trouvée (ibsi_results_pass2.dat absent)")
+            print("  La passe 2 nécessite un fichier mol.xyz avec fragments définis")
+        
         print("\n" + "="*60)
-        print("Génération des graphiques...")
+        print("Génération des histogrammes...")
         print("="*60)
         
-        print("\n1. Structure moléculaire 3D et matrice IBSI...")
-        plot_molecule_3d(coords, atomic_numbers, bonds_data)
-        
-        print("\n2. Histogrammes des valeurs IBSI...")
-        plot_ibsi_histogram(bonds_data)
-        
-        print("\n3. Réseau de liaisons 2D...")
-        plot_bond_network(coords, atomic_numbers, bonds_data)
+        plot_dual_histograms(data_pass1, threshold_cov, data_pass2, threshold_nc)
         
         print("\n" + "="*60)
         print("Visualisation terminée avec succès!")
@@ -293,7 +295,7 @@ def main():
         
     except FileNotFoundError as e:
         print(f"\nERREUR: Fichier non trouvé - {e}")
-        print("Assurez-vous que les fichiers 'fichier.wfx' et 'ibsi_results.dat' existent.")
+        print("Assurez-vous d'avoir exécuté le programme ibsi avant de visualiser.")
         sys.exit(1)
     except Exception as e:
         print(f"\nERREUR: {e}")

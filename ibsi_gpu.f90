@@ -249,11 +249,11 @@ CONTAINS
     ! variables en registres GPU → accès O(1) sans latence mémoire.
     ! =========================================================================
     DO CONCURRENT (ipair = 1:npairs) &
-      LOCAL(a, b, xa, ya, za, xb, yb, zb,                          &
-            a1a, a2a, a3a, b1a, b2a, b3a,                          &
-            a1b, a2b, a3b, b1b, b2b, b3b,                          &
+      LOCAL(a, b, xa, ya, za, xb, yb, zb, &
+            a1a, a2a, a3a, b1a, b2a, b3a, &
+            a1b, a2b, a3b, b1b, b2b, b3b, &
             d_ab, dg_sum, ZA_a, ZA_b)
-
+            
       a    = aa_list(ipair)
       b    = bb_list(ipair)
       ZA_a = ZAatoms(a)
@@ -515,13 +515,7 @@ PROGRAM ibsi_gpu_analysis
   ! -------------------------------------------------------------------------
   ! Chrono global démarré AVANT tout (inclut transferts données → GPU)
   ! -------------------------------------------------------------------------
-  CALL CPU_TIME(t_total_start)   ! fallback si pas OMP_LIB
-#ifdef _OPENMP
-  BLOCK
-    USE OMP_LIB
-    t_total_start = OMP_GET_WTIME()
-  END BLOCK
-#endif
+CALL CPU_TIME(t_total_start)
 
   ! -------------------------------------------------------------------------
   ! Valeurs par défaut
@@ -701,13 +695,7 @@ PROGRAM ibsi_gpu_analysis
   PRINT *, "  [Lancement des noyaux GPU...]"
   PRINT *, "  (Transfert données CPU->GPU inclus dans la mesure)"
 
-  CALL CPU_TIME(t_gpu_start)
-#ifdef _OPENMP
-  BLOCK
-    USE OMP_LIB
-    t_gpu_start = OMP_GET_WTIME()
-  END BLOCK
-#endif
+CALL CPU_TIME(t_total_start)
 
   ! ---------------------------------------------------------------------------
   ! APPEL DU NOYAU GPU
@@ -724,13 +712,7 @@ PROGRAM ibsi_gpu_analysis
                          nx, ny, nz,                       &
                          ibsi_matrix)
 
-  CALL CPU_TIME(t_gpu_end)
-#ifdef _OPENMP
-  BLOCK
-    USE OMP_LIB
-    t_gpu_end = OMP_GET_WTIME()
-  END BLOCK
-#endif
+CALL CPU_TIME(t_total_start)
 
   ! =========================================================================
   ! RAPPORT DE PERFORMANCES GPU
@@ -937,13 +919,7 @@ PROGRAM ibsi_gpu_analysis
   ! =========================================================================
   ! BILAN FINAL
   ! =========================================================================
-  CALL CPU_TIME(t_total_end)
-#ifdef _OPENMP
-  BLOCK
-    USE OMP_LIB
-    t_total_end = OMP_GET_WTIME()
-  END BLOCK
-#endif
+CALL CPU_TIME(t_total_start)
 
   PRINT *, "Fichiers ecrits : molecule.pdb  ibsi_results.dat"
   PRINT *, ""
