@@ -1,0 +1,49 @@
+#!/bin/bash
+
+if [ $# -lt 1 ]; then
+    echo "Usage:"
+    echo "  $0 seq [arguments]"
+    echo "  $0 omp <nb_threads> [arguments]"
+    echo "  $0 gpu [arguments]"
+    exit 1
+fi
+
+mode="$1"
+shift   # on enlève seq/omp/gpu
+
+case "$mode" in
+    seq)
+        exe="./ibsi"
+        ;;
+
+    omp)
+        if [[ "$1" =~ ^[0-9]+$ ]]; then
+            export OMP_NUM_THREADS="$1"
+            echo "Running OpenMP version with $OMP_NUM_THREADS threads"
+            shift
+        else
+            echo "Erreur: omp nécessite <nb_threads>"
+            exit 1
+        fi
+        exe="./ibsi_parallel"
+        ;;
+
+    gpu)
+        exe="./ibsi_gpu"
+        ;;
+
+    *)
+        echo "Version inconnue: $mode"
+        echo "Choisir: seq | omp | gpu"
+        exit 1
+        ;;
+esac
+
+echo "--------------------------------------"
+echo "Executable : $exe"
+echo "Arguments  : $@"
+echo "--------------------------------------"
+
+"$exe" "$@"
+
+vmd -e visu
